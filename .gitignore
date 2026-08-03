@@ -1,0 +1,35 @@
+# --- Secrets et configuration locale -----------------------------------------
+.env
+.env.local
+
+ROADMAP.md
+docs/STACK.md
+
+# --- Java / Maven -------------------------------------------------------------
+target/
+*.class
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Node / React -------------------------------------------------------------
+node_modules/
+dist/
+.vite/
+*.local
+
+# --- IDE ----------------------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# --- OS -----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# --- Logs ---------------------------------------------------------------------
+*.log
+logs/
