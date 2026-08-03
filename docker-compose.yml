@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine          
+    image: postgres:16-alpine
     container_name: eventflow-postgres
     restart: unless-stopped
     environment:
@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"                    
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -21,29 +21,119 @@ services:
     networks:
       - eventflow-net
 
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: eventflow-kafka
+    restart: unless-stopped
+    ports:
+      # Seul le listener HOST est publié. Le listener INTERNAL annonce `kafka:9092`,
+      # une adresse que seul le réseau Docker sait résoudre : l'exposer n'aurait aucun sens.
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Identité du cluster. Doit rester FIXE : si elle change, le broker ne
+      # reconnaît plus les données présentes dans son volume et refuse de démarrer.
+      CLUSTER_ID: nZ_mUR26RpGuTRdVa8YaFw
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # Deux populations de clients, deux vues réseau incompatibles :
+      #   INTERNAL -> les conteneurs, qui résolvent `kafka` par le DNS Docker
+      #   HOST     -> ton IDE et Testcontainers, qui ne connaissent que localhost
+      KAFKA_LISTENERS: INTERNAL://:9092,HOST://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      # Kafka veut 3 réplicas par défaut pour ses topics internes et refuse de
+      # démarrer sur un nœud unique sans ces trois lignes.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Pas d'attente au premier consumer d'un groupe : démarrage plus rapide en dev.
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Une faute de frappe dans un nom de topic doit échouer, pas créer un topic fantôme.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks:
+      - eventflow-net
+
+  localstack:
+    image: localstack/localstack:4
+    container_name: eventflow-localstack
+    restart: unless-stopped
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,sns
+      AWS_DEFAULT_REGION: ${AWS_REGION}
+      DEBUG: 0
+      PERSISTENCE: 0
+    volumes:
+      # Scripts joués une fois LocalStack prêt : création du bucket et du topic SNS.
+      # Pas de montage de /var/run/docker.sock : il n'est requis que pour Lambda,
+      # et donne un accès root à l'hôte.
+      - ./infra/localstack/init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - eventflow-net
+
+  # --- Outils de confort : `docker compose --profile tools up -d` --------------
+
   pgadmin:
-    image: dpage/pgadmin4:8.14      
+    image: dpage/pgadmin4:8.14
     container_name: eventflow-pgadmin
     restart: unless-stopped
     profiles: [tools]
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"   
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "5050:80"                     
+      - "5050:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
       - ./infra/pgadmin/servers.json:/pgadmin4/servers.json:ro
     depends_on:
       postgres:
-        condition: service_healthy  
+        condition: service_healthy
+    networks:
+      - eventflow-net
+
+  kafka-ui:
+    # kafbat/kafka-ui est la suite maintenue de provectuslabs/kafka-ui, archivé.
+    image: kafbat/kafka-ui:v1.5.0
+    container_name: eventflow-kafka-ui
+    restart: unless-stopped
+    profiles: [tools]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: eventflow
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8090:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
     networks:
       - eventflow-net
 
 volumes:
   postgres-data:
   pgadmin-data:
+  kafka-data:
 
 networks:
   eventflow-net:
