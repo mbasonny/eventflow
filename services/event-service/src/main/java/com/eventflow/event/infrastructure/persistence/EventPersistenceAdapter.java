@@ -5,6 +5,7 @@ import com.eventflow.event.domain.model.EventId;
 import com.eventflow.event.domain.port.out.EventRepository;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
@@ -14,17 +15,17 @@ import org.springframework.stereotype.Component;
  * {@link EventRepository} déclaré par le domaine, au moyen de Spring Data JPA.
  *
  * <p>C'est le seul endroit de l'application où JPA et le domaine se rencontrent.
+ *
+ * <p>{@code @RequiredArgsConstructor} génère le constructeur sur les champs
+ * {@code final} : on reste en injection par constructeur, avec les dépendances
+ * visibles et la classe instanciable sans conteneur Spring. Rien à voir avec un
+ * {@code @Autowired} sur un champ, qui masquerait les dépendances.
  */
 @Component
+@RequiredArgsConstructor
 class EventPersistenceAdapter implements EventRepository {
 
     private final EventJpaRepository jpaRepository;
-
-    // Injection par constructeur : les dépendances sont visibles, la classe est
-    // instanciable en test sans conteneur Spring.
-    EventPersistenceAdapter(EventJpaRepository jpaRepository) {
-        this.jpaRepository = jpaRepository;
-    }
 
     @Override
     public Event save(Event event) {

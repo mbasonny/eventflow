@@ -66,6 +66,17 @@
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<!--
+		  Lombok est cantonne a l'infrastructure : jamais sous domain/, et
+		  jamais @Data ni @Setter sur une entite (voir docs/implementation).
+		  `optional` : c'est un processeur d'annotations, il ne doit pas fuir
+		  dans les dependances transitives ni dans le jar final.
+		-->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator-test</artifactId>

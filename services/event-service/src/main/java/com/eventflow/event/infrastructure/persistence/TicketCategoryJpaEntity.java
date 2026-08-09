@@ -9,15 +9,26 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
 
 /** Représentation JPA d'une catégorie de places. */
 @Entity
 @Table(name = "ticket_categories")
+@Getter(AccessLevel.PACKAGE)
 class TicketCategoryJpaEntity {
 
     @Id
     private UUID id;
 
+    /**
+     * Aucun getter généré : exposer le parent inviterait à remonter
+     * l'association depuis un enfant, ce qui déclenche un chargement paresseux
+     * inattendu. On navigue toujours depuis la racine d'agrégat.
+     */
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.PACKAGE)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "event_id", nullable = false)
     private EventJpaEntity event;
@@ -51,33 +62,5 @@ class TicketCategoryJpaEntity {
         this.priceCurrency = priceCurrency;
         this.capacity = capacity;
         this.availableSeats = availableSeats;
-    }
-
-    UUID getId() {
-        return id;
-    }
-
-    String getName() {
-        return name;
-    }
-
-    BigDecimal getPriceAmount() {
-        return priceAmount;
-    }
-
-    String getPriceCurrency() {
-        return priceCurrency;
-    }
-
-    int getCapacity() {
-        return capacity;
-    }
-
-    int getAvailableSeats() {
-        return availableSeats;
-    }
-
-    void setEvent(EventJpaEntity event) {
-        this.event = event;
     }
 }
