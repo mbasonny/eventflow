@@ -49,13 +49,27 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         register-health-indicator: true
+        # DECISIF : un refus metier n'est pas une panne. Un concert complet
+        # genere des milliers de 409 legitimes ; les compter comme des echecs
+        # ouvrirait le circuit sur un service en parfaite sante.
+        ignore-exceptions:
+          - com.eventflow.booking.domain.exception.SeatsUnavailableException
+          - com.eventflow.booking.domain.exception.CategoryUnavailableException
   retry:
     instances:
       event-service:
         max-attempts: 3
         wait-duration: 200ms
+        # Backoff exponentiel : 200ms, 400ms, 800ms. Sans lui, N clients qui
+        # reessaient au meme rythme frappent le service en rafales synchronisees
+        # et l'empechent de se relever.
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
+        # Reessayer un refus metier est inutile : le stock ne reapparaitra pas
+        # en 200 ms, et on triple la charge pour rien.
+        ignore-exceptions:
+          - com.eventflow.booking.domain.exception.SeatsUnavailableException
+          - com.eventflow.booking.domain.exception.CategoryUnavailableException
 
 management:
   endpoints:
