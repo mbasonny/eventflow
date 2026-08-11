@@ -2,13 +2,17 @@ package com.eventflow.event.infrastructure.rest;
 
 import com.eventflow.event.domain.model.CategoryId;
 import com.eventflow.event.domain.model.EventId;
+import com.eventflow.event.domain.model.Quantity;
 import com.eventflow.event.domain.port.in.CreateEventUseCase;
 import com.eventflow.event.domain.port.in.DeleteEventUseCase;
 import com.eventflow.event.domain.port.in.FindEventsUseCase;
+import com.eventflow.event.domain.port.in.ReserveSeatsUseCase;
+import com.eventflow.event.domain.port.in.ReserveSeatsUseCase.ReserveSeatsCommand;
 import com.eventflow.event.domain.port.in.UpdateEventUseCase;
 import com.eventflow.event.infrastructure.rest.dto.CreateEventRequest;
 import com.eventflow.event.infrastructure.rest.dto.EventResponse;
 import com.eventflow.event.infrastructure.rest.dto.PagedResponse;
+import com.eventflow.event.infrastructure.rest.dto.ReserveSeatsRequest;
 import com.eventflow.event.infrastructure.rest.dto.TicketCategoryResponse;
 import com.eventflow.event.infrastructure.rest.dto.UpdateEventRequest;
 import com.eventflow.event.infrastructure.rest.mapper.EventRestMapper;
@@ -57,6 +61,7 @@ class EventController {
     private final UpdateEventUseCase updateEvent;
     private final DeleteEventUseCase deleteEvent;
     private final FindEventsUseCase findEvents;
+    private final ReserveSeatsUseCase reserveSeats;
     private final EventRestMapper mapper;
 
     @PostMapping
@@ -121,5 +126,22 @@ class EventController {
     TicketCategoryResponse availability(@PathVariable UUID id, @PathVariable UUID categoryId) {
         return mapper.toResponse(
                 findEvents.category(EventId.of(id), CategoryId.of(categoryId)));
+    }
+
+    @PostMapping("/{id}/categories/{categoryId}/reservations")
+    @Operation(summary = "Réserver des places dans une catégorie",
+            description = "Appelé par booking-service. Renvoie la disponibilité mise à jour.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Places réservées"),
+            @ApiResponse(responseCode = "404", description = "Événement ou catégorie inconnu", content = @io.swagger.v3.oas.annotations.media.Content),
+            @ApiResponse(responseCode = "409", description = "Stock insuffisant", content = @io.swagger.v3.oas.annotations.media.Content)
+    })
+    TicketCategoryResponse reserve(
+            @PathVariable UUID id,
+            @PathVariable UUID categoryId,
+            @Valid @RequestBody ReserveSeatsRequest request) {
+
+        return mapper.toResponse(reserveSeats.reserve(new ReserveSeatsCommand(
+                EventId.of(id), CategoryId.of(categoryId), Quantity.of(request.quantity()))));
     }
 }

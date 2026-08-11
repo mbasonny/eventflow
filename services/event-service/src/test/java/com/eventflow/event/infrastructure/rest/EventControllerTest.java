@@ -21,6 +21,7 @@ import com.eventflow.event.domain.model.TicketCategory;
 import com.eventflow.event.domain.port.in.CreateEventUseCase;
 import com.eventflow.event.domain.port.in.DeleteEventUseCase;
 import com.eventflow.event.domain.port.in.FindEventsUseCase;
+import com.eventflow.event.domain.port.in.ReserveSeatsUseCase;
 import com.eventflow.event.domain.port.in.UpdateEventUseCase;
 import com.eventflow.event.infrastructure.rest.mapper.EventRestMapper;
 import java.time.Clock;
@@ -75,6 +76,9 @@ class EventControllerTest {
 
     @MockitoBean
     private FindEventsUseCase findEvents;
+
+    @MockitoBean
+    private ReserveSeatsUseCase reserveSeats;
 
     private static Event anEvent() {
         Event event = Event.rehydrate(
@@ -220,6 +224,46 @@ class EventControllerTest {
 
         mockMvc.perform(delete("/api/v1/events/{id}", missing.value()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void should_reserve_seats_and_return_the_updated_availability() throws Exception {
+        TicketCategory category = TicketCategory.rehydrate(
+                CategoryId.newId(), "Fosse", Money.euros("49.90"), 100, 97);
+        given(reserveSeats.reserve(any())).willReturn(category);
+
+        mockMvc.perform(post("/api/v1/events/{id}/categories/{cid}/reservations",
+                        EventId.newId().value(), category.id().value())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\": 3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availableSeats").value(97))
+                .andExpect(jsonPath("$.capacity").value(100));
+    }
+
+    @Test
+    void should_return_409_when_reserving_more_seats_than_available() throws Exception {
+        CategoryId categoryId = CategoryId.newId();
+        given(reserveSeats.reserve(any()))
+                .willThrow(new InsufficientSeatsException(categoryId, 40, 12));
+
+        mockMvc.perform(post("/api/v1/events/{id}/categories/{cid}/reservations",
+                        EventId.newId().value(), categoryId.value())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\": 40}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.requested").value(40))
+                .andExpect(jsonPath("$.available").value(12));
+    }
+
+    @Test
+    void should_reject_a_reservation_of_zero_seats() throws Exception {
+        mockMvc.perform(post("/api/v1/events/{id}/categories/{cid}/reservations",
+                        EventId.newId().value(), CategoryId.newId().value())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\": 0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.quantity").exists());
     }
 
     @Test

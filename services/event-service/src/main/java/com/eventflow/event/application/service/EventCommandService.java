@@ -6,6 +6,7 @@ import com.eventflow.event.domain.model.EventId;
 import com.eventflow.event.domain.model.TicketCategory;
 import com.eventflow.event.domain.port.in.CreateEventUseCase;
 import com.eventflow.event.domain.port.in.DeleteEventUseCase;
+import com.eventflow.event.domain.port.in.ReserveSeatsUseCase;
 import com.eventflow.event.domain.port.in.UpdateEventUseCase;
 import com.eventflow.event.domain.port.out.EventRepository;
 import java.time.Clock;
@@ -33,7 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
-class EventCommandService implements CreateEventUseCase, UpdateEventUseCase, DeleteEventUseCase {
+class EventCommandService
+        implements CreateEventUseCase, UpdateEventUseCase, DeleteEventUseCase, ReserveSeatsUseCase {
 
     private final EventRepository eventRepository;
     private final Clock clock;
@@ -67,5 +69,23 @@ class EventCommandService implements CreateEventUseCase, UpdateEventUseCase, Del
             throw new EventNotFoundException(id);
         }
         eventRepository.deleteById(id);
+    }
+
+    /**
+     * Charger → laisser l'agrégat appliquer la règle → sauvegarder.
+     *
+     * <p>Le service ne compare aucun stock et ne décrémente rien lui-même : c'est
+     * {@code TicketCategory.reserve()} qui décide, et qui lève si le stock est
+     * insuffisant. La transaction garantit qu'un échec ne laisse rien de
+     * partiellement écrit.
+     */
+    @Override
+    public TicketCategory reserve(ReserveSeatsCommand command) {
+        Event event = eventRepository.findById(command.eventId())
+                .orElseThrow(() -> new EventNotFoundException(command.eventId()));
+
+        event.reserveSeats(command.categoryId(), command.quantity());
+
+        return eventRepository.save(event).category(command.categoryId());
     }
 }
